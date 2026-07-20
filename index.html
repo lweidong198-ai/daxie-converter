@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>小写金额 · 转大写</title>
+<style>
+  :root{
+    --paper:#f3ead6;
+    --paper-card:#fbf5e6;
+    --ink:#33302a;
+    --ink-soft:#6f6657;
+    --seal:#b23a2e;
+    --line:#cdb98c;
+    --line-soft:#e3d6b8;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    font-family:"Kaiti SC","STKaiti","KaiTi","楷体","Songti SC","SimSun","宋体",serif;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 18% 12%, rgba(255,255,255,.45), transparent 45%),
+      radial-gradient(circle at 82% 88%, rgba(190,160,110,.18), transparent 50%),
+      var(--paper);
+    background-attachment:fixed;
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:28px 16px;
+  }
+  /* 宣纸细纹理 */
+  body::before{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; opacity:.5;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(120,95,55,.04) 0 1px, transparent 1px 3px),
+      repeating-linear-gradient(90deg, rgba(120,95,55,.035) 0 1px, transparent 1px 3px);
+  }
+  .card{
+    position:relative;
+    width:100%; max-width:480px;
+    background:var(--paper-card);
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:34px 30px 30px;
+    box-shadow:0 10px 30px rgba(90,70,40,.18), inset 0 0 0 4px rgba(255,255,255,.35);
+  }
+  /* 内描红边 */
+  .card::after{
+    content:""; position:absolute; inset:9px;
+    border:1px solid var(--line-soft); border-radius:2px; pointer-events:none;
+  }
+  .head{ display:flex; align-items:center; gap:14px; margin-bottom:6px; }
+  .seal{
+    flex:0 0 auto; width:46px; height:46px;
+    background:var(--seal); color:var(--paper-card);
+    border-radius:4px; display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:700; letter-spacing:0;
+    box-shadow:0 2px 0 rgba(120,40,30,.5);
+  }
+  .title{ font-size:24px; letter-spacing:4px; font-weight:700; }
+  .subtitle{ font-size:13px; color:var(--ink-soft); letter-spacing:2px; margin-top:2px; }
+
+  .field{ margin-top:26px; }
+  label{ display:block; font-size:14px; color:var(--ink-soft); letter-spacing:2px; margin-bottom:8px; }
+  .input-row{ display:flex; align-items:baseline; gap:8px; border-bottom:1.5px solid var(--line); padding-bottom:6px; }
+  .rmb{ font-size:22px; color:var(--seal); }
+  #amount{
+    flex:1; border:none; outline:none; background:transparent;
+    font-family:inherit; font-size:24px; color:var(--ink); letter-spacing:1px;
+  }
+  #amount::placeholder{ color:#bcae90; font-size:17px; letter-spacing:1px; }
+
+  .result-box{ margin-top:24px; min-height:64px; }
+  .result-label{ font-size:13px; color:var(--ink-soft); letter-spacing:2px; margin-bottom:6px; }
+  .result{
+    font-size:27px; line-height:1.5; letter-spacing:2px; color:var(--ink);
+    word-break:break-all; min-height:40px;
+  }
+  .result.empty{ color:#c3b595; font-size:18px; letter-spacing:1px; }
+  .copy-btn{
+    margin-top:16px; display:inline-flex; align-items:center; gap:6px;
+    font-family:inherit; font-size:14px; letter-spacing:2px;
+    color:var(--seal); background:transparent;
+    border:1px solid var(--seal); border-radius:3px;
+    padding:7px 16px; cursor:pointer; transition:.18s;
+  }
+  .copy-btn:hover{ background:var(--seal); color:var(--paper-card); }
+  .copy-btn:active{ transform:translateY(1px); }
+  .copy-btn.done{ background:var(--seal); color:var(--paper-card); }
+  .err{ color:var(--seal); font-size:13px; letter-spacing:1px; margin-top:10px; min-height:18px; }
+
+  .foot{ margin-top:22px; font-size:12px; color:#a89a7c; letter-spacing:1px; text-align:center; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="head">
+      <div class="seal">轉</div>
+      <div>
+        <div class="title">小写金额转大写</div>
+        <div class="subtitle">人民币 · 财务大写 · 银行票据规范</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>请输入小写金额</label>
+      <div class="input-row">
+        <span class="rmb">¥</span>
+        <input id="amount" type="text" inputmode="decimal" autocomplete="off"
+               placeholder="例如 1234.56 或 -100000005" />
+      </div>
+      <div class="err" id="err"></div>
+    </div>
+
+    <div class="result-box">
+      <div class="result-label">大写结果</div>
+      <div class="result empty" id="result">输入数字，自动转换…</div>
+      <button class="copy-btn" id="copy" style="display:none">复制结果</button>
+    </div>
+
+    <div class="foot">支持负数 · 元角分 · 至兆京 · 自动四舍五入至分</div>
+  </div>
+
+<script>
+  const D = ['零','壹','贰','叁','肆','伍','陆','柒','捌','玖'];
+  const U = ['','拾','佰','仟'];
+  const G = ['','万','亿','兆','京','垓','秭','穰'];
+
+  // 字符串加 1（处理进位，支持超大数）
+  function stringAdd1(s){
+    const arr = s.split('');
+    let carry = 1;
+    for(let i = arr.length - 1; i >= 0 && carry; i--){
+      const v = (+arr[i]) + carry;
+      if(v >= 10){ arr[i] = '0'; carry = 1; }
+      else { arr[i] = String(v); carry = 0; }
+    }
+    if(carry) arr.unshift('1');
+    return arr.join('');
+  }
+
+  // 整数部分转财务大写
+  function intToCapital(intStr){
+    intStr = intStr.replace(/^0+/, '');
+    if(intStr === '') return '零';
+    const groups = [];
+    let s = intStr;
+    while(s.length){
+      groups.unshift(s.slice(-4));
+      s = s.slice(0, -4);
+    }
+    const n = groups.length;
+    let res = '';
+    let zeroPending = false;
+    for(let g = 0; g < n; g++){
+      const group = groups[g];
+      const groupUnit = G[n - 1 - g];
+      let groupRes = '';
+      let groupZeroPending = false;
+      let groupAny = false;
+      for(let k = 0; k < group.length; k++){
+        const d = +group[k];
+        const pos = group.length - 1 - k;
+        if(d === 0){
+          groupZeroPending = true;
+        } else {
+          if(groupZeroPending){ groupRes += '零'; groupZeroPending = false; }
+          groupRes += D[d] + U[pos];
+          groupAny = true;
+        }
+      }
+      if(groupAny){
+        if(zeroPending && res !== '' && groupRes[0] === '零'){
+          groupRes = groupRes.slice(1);
+        }
+        if(zeroPending && res !== '') res += '零';
+        res += groupRes + groupUnit;
+        zeroPending = false;
+      } else {
+        if(res !== '') zeroPending = true;
+      }
+    }
+    return res || '零';
+  }
+
+  // 小数（角分）四舍五入至两位
+  function roundDecimal(intPart, decPart){
+    if(decPart.length === 0) return { intPart, jiao:0, fen:0 };
+    if(decPart.length === 1) return { intPart, jiao:+decPart[0], fen:0 };
+    if(decPart.length === 2) return { intPart, jiao:+decPart[0], fen:+decPart[1] };
+    let val = +decPart.slice(0,2);
+    if(+decPart[2] >= 5) val += 1;
+    if(val >= 100){ val -= 100; intPart = stringAdd1(intPart); }
+    return { intPart, jiao:Math.floor(val/10), fen:val % 10 };
+  }
+
+  // 拼装 元角分 + 整
+  function decimalPart(intPart, jiao, fen){
+    const hasInt = intPart !== '0' && intPart !== '';
+    let res = '';
+    if(hasInt) res += intToCapital(intPart) + '元';
+    if(jiao === 0 && fen === 0){
+      return hasInt ? res + '整' : '零元整';
+    }
+    if(jiao > 0){
+      res += D[jiao] + '角';
+    } else if(hasInt){
+      res += '零'; // 元与分之间补零
+    }
+    if(fen > 0){
+      res += D[fen] + '分';
+    }
+    return res;
+  }
+
+  function parseInput(raw){
+    let s = raw.replace(/[,，\s]/g, '');
+    if(s === '') return null;
+    let neg = false;
+    if(s[0] === '-'){ neg = true; s = s.slice(1); }
+    if(!/^\d*\.?\d*$/.test(s) || s === '.' ) return { error:true };
+    if(s.startsWith('.')) s = '0' + s;
+    if(s.endsWith('.')) s = s.slice(0, -1);
+    let parts = s.split('.');
+    let intPart = parts[0] === '' ? '0' : parts[0];
+    let decPart = parts[1] || '';
+    if(intPart.replace(/^0+/,'') === '') intPart = '0';
+    if(intPart.length > 20) return { error:true, msg:'数字过长，仅支持到京（16位）以内' };
+    const r = roundDecimal(intPart, decPart);
+    return { neg, intPart:r.intPart, jiao:r.jiao, fen:r.fen };
+  }
+
+  function convert(raw){
+    const p = parseInput(raw);
+    if(p === null) return { text:'', empty:true };
+    if(p.error) return { error:p.msg || '请输入有效的数字' };
+    let result = decimalPart(p.intPart, p.jiao, p.fen);
+    const allZero = (p.intPart === '0' || p.intPart === '') && p.jiao === 0 && p.fen === 0;
+    if(p.neg && !allZero) result = '负' + result;
+    return { text:result };
+  }
+
+  // ===== UI =====
+  const input = document.getElementById('amount');
+  const resultEl = document.getElementById('result');
+  const errEl = document.getElementById('err');
+  const copyBtn = document.getElementById('copy');
+
+  function render(){
+    const raw = input.value.trim();
+    errEl.textContent = '';
+    if(raw === ''){
+      resultEl.textContent = '输入数字，自动转换…';
+      resultEl.classList.add('empty');
+      copyBtn.style.display = 'none';
+      return;
+    }
+    const out = convert(raw);
+    if(out.error){
+      errEl.textContent = '✕ ' + out.error;
+      resultEl.textContent = '—';
+      resultEl.classList.add('empty');
+      copyBtn.style.display = 'none';
+      return;
+    }
+    resultEl.textContent = out.text;
+    resultEl.classList.remove('empty');
+    copyBtn.style.display = 'inline-flex';
+    copyBtn.classList.remove('done');
+    copyBtn.textContent = '复制结果';
+  }
+
+  input.addEventListener('input', render);
+
+  copyBtn.addEventListener('click', async () => {
+    const text = resultEl.textContent;
+    try{
+      await navigator.clipboard.writeText(text);
+    }catch(e){
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    }
+    copyBtn.textContent = '已复制 ✓';
+    copyBtn.classList.add('done');
+    setTimeout(() => { copyBtn.textContent = '复制结果'; copyBtn.classList.remove('done'); }, 1500);
+  });
+
+  render();
+</script>
+</body>
+</html>
